@@ -194,6 +194,12 @@ static void mp_machine_lightsleep(size_t n_args, const mp_obj_t *args) {
         #if MICROPY_PY_NETWORK_CYW43
         gpio_set_dormant_irq_enabled(CYW43_PIN_WL_HOST_WAKE, GPIO_IRQ_LEVEL_HIGH, true);
         #endif
+        int wakeup_pin = 27;
+        gpio_init(wakeup_pin);
+        gpio_set_input_enabled(wakeup_pin, true);
+        gpio_acknowledge_irq(wakeup_pin, IO_BANK0_DORMANT_WAKE_INTE0_GPIO0_EDGE_LOW_BITS);
+        gpio_set_dormant_irq_enabled(wakeup_pin, IO_BANK0_DORMANT_WAKE_INTE0_GPIO0_EDGE_LOW_BITS, true);
+        gpio_set_pulls(wakeup_pin, true, false);
         xosc_dormant();
     } else {
         bool timer3_enabled = irq_is_enabled(3);
