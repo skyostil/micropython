@@ -1,17 +1,50 @@
 #include "py/runtime.h"
 
-#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
+#include "hardware/watchdog.h"
+
+#define dlog(...) mp_printf(&mp_plat_print, __VA_ARGS__)
 
 #include "hxcmod.h"
+
+void* tracked_malloc(size_t size) {
+    void* ptr = m_tracked_calloc(1, size);
+    if (!ptr) {
+        dlog("Out of memory, aieee...\n");
+        watchdog_reboot(0, SRAM_END, 0);
+        for (;;) {
+            __wfi();
+        }
+    }
+    return ptr;
+}
+
+void* tracked_realloc(void* ptr, size_t size) {
+    void* new_ptr = tracked_malloc(size);
+    if (ptr) {
+        // This should be the old size...
+        memcpy(new_ptr, ptr, size);
+        m_tracked_free(ptr);
+    }
+    return new_ptr;
+}
 
 #define TSF_IMPLEMENTATION
 #define TSF_NO_STDIO
 // #define TSF_STATIC
+#define TSF_MALLOC tracked_malloc
+#define TSF_FREE m_tracked_free
+#define TSF_REALLOC tracked_realloc
 #include "tsf.h"
         
 #define TML_IMPLEMENTATION
 #define TML_NO_STDIO
 // #define TML_STATIC
+#define TML_MALLOC tracked_malloc
+#define TML_FREE m_tracked_free
+#define TML_REALLOC tracked_realloc
 #include "tml.h"
 
 // hxcmod
@@ -21,12 +54,14 @@ modcontext ctx;
 tsf* tsf_ctx = NULL;
 float midi_msec = 0.f;
 tml_message* midi_ctx = NULL;
+tml_message* midi_root_ctx = NULL;
 
 static mp_obj_t init() {
     hxcmod_init(&ctx);
     hxcmod_setcfg(&ctx, 22050, 0, 1);
     tsf_ctx = NULL;
     midi_ctx = NULL;
+    midi_root_ctx = NULL;
     midi_msec = 0.f;
     return mp_const_none;
 }
@@ -36,16 +71,19 @@ static mp_obj_t load(mp_obj_t buffer_obj) {
     mp_get_buffer_raise(buffer_obj, &bufinfo, MP_BUFFER_READ);
     int ret = hxcmod_load(&ctx, bufinfo.buf, bufinfo.len);
     midi_ctx = NULL;
+    midi_root_ctx = NULL;
     return mp_obj_new_int(ret);
 }
-
 
 static mp_obj_t load_sf2(mp_obj_t buffer_obj) {
     mp_buffer_info_t bufinfo;
     mp_get_buffer_raise(buffer_obj, &bufinfo, MP_BUFFER_READ);
+    // dlog("heap total %d, free %d\n", get_total_heap(), get_free_heap());
+    // dlog("loading tsf from %p len %d\n", bufinfo.buf, bufinfo.len);
     tsf_ctx = tsf_load_memory(bufinfo.buf, bufinfo.len);
     if (tsf_ctx) {
         tsf_set_output(tsf_ctx, TSF_MONO, 22050, -10.f);
+        tsf_set_volume(tsf_ctx, ctx.global_volume / 255.f);
     }
     return mp_obj_new_int(tsf_ctx != NULL);
 }
@@ -53,7 +91,8 @@ static mp_obj_t load_sf2(mp_obj_t buffer_obj) {
 static mp_obj_t load_midi(mp_obj_t buffer_obj) {
     mp_buffer_info_t bufinfo;
     mp_get_buffer_raise(buffer_obj, &bufinfo, MP_BUFFER_READ);
-    midi_ctx = tml_load_memory(bufinfo.buf, bufinfo.len);
+    midi_root_ctx = tml_load_memory(bufinfo.buf, bufinfo.len);
+    midi_ctx = midi_root_ctx;
     midi_msec = 0.f;
     return mp_obj_new_int(midi_ctx != NULL);
 }
@@ -98,11 +137,12 @@ static mp_obj_t fillbuffer(mp_obj_t buffer_obj) {
             }
             tsf_render_short(tsf_ctx, (int16_t*)stream, sample_block, 0);
         }
+        return mp_obj_new_int((int)midi_msec);
     } else {
         // Assumes that HXCMOD_MONO_OUTPUT is set.
         hxcmod_fillbuffer(&ctx, bufinfo.buf, bufinfo.len / 2, NULL);
+        return mp_obj_new_int(ctx.patternpos);
     }
-    return mp_obj_new_int(ctx.patternpos);
 }
 
 static mp_obj_t unload() {
@@ -119,8 +159,9 @@ static mp_obj_t unload_sf2() {
 }
 
 static mp_obj_t unload_midi() {
-    if (midi_ctx != NULL) {
-        tml_free(midi_ctx);
+    if (midi_root_ctx != NULL) {
+        tml_free(midi_root_ctx);
+        midi_root_ctx = NULL;
         midi_ctx = NULL;
     }
     return mp_const_none;
@@ -135,6 +176,9 @@ static mp_obj_t set_volume(mp_obj_t volume) {
         vol = 0xff;
     }
     ctx.global_volume = vol;
+    if (tsf_ctx != NULL) {
+        tsf_set_volume(tsf_ctx, vol / 255.f);
+    }
     return mp_const_none;
 }
 
@@ -158,32 +202,6 @@ static mp_obj_t write_note(mp_obj_t sample_obj, mp_obj_t period_obj, mp_obj_t ef
     n->effect = effect & 0xff;
     return mp_const_none;
 }
-
-#if 0
-#if defined(__arm__)
-void* memset(void* ptr, int value, size_t n) {
-    char* p = ptr;
-    while (n--) {
-        *p++ = value;
-    }
-    return p;
-}
-void* memcpy(void* dest, const void* src, size_t n) {
-    char* d = dest;
-    const char* s = src;
-    while (n--) {
-        *d++ = *s++;
-    }
-    return d;
-}
-// int* __errno() {
-//     return NULL;
-// }
-float __divdf3(float a, float b) {
-    return 0.f;
-}
-#endif
-#endif
 
 static MP_DEFINE_CONST_FUN_OBJ_0(init_obj, init);
 static MP_DEFINE_CONST_FUN_OBJ_1(load_obj, load);

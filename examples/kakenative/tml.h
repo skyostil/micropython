@@ -301,10 +301,8 @@ static int tml_parsemessage(tml_message** f, struct tml_parser* p)
 	if (p->message_array_size == p->message_count)
 	{
 		//start allocated memory size of message array at 64, double each time until 8192, then add 1024 entries until done
-		int prev_size = p->message_array_size;
 		// p->message_array_size += (!p->message_array_size ? 64 : (p->message_array_size > 4096 ? 1024 : p->message_array_size));
 		p->message_array_size += (!p->message_array_size ? 64 : 1024);
-		printf("msg array size %d => %d\n", prev_size * sizeof(tml_message), p->message_array_size * sizeof(tml_message));
 		*f = (tml_message*)TML_REALLOC(*f, p->message_array_size * sizeof(tml_message));
 		if (!*f) { TML_ERROR("Out of memory"); return -1; }
 	}
@@ -409,7 +407,6 @@ TMLDEF tml_message* tml_load(struct tml_stream* stream)
 	if (num_tracks <= 0 && division <= 0) { TML_ERROR("Doesn't look like a MIDI file: invalid track or division values"); return messages; }
 
 	// Allocate temporary tracks array for parsing
-	printf("load tracks %d\n", sizeof(struct tml_track) * num_tracks);
 	tracks = (struct tml_track*)TML_MALLOC(sizeof(struct tml_track) * num_tracks);
 	tracksEnd = &tracks[num_tracks];
 	for (t = tracks; t != tracksEnd; t++) t->Idx = t->End = t->Ticks = 0;
@@ -425,7 +422,6 @@ TMLDEF tml_message* tml_load(struct tml_stream* stream)
 
 		// Get size of track data and read into buffer (allocate bigger buffer if needed)
 		track_length = track_header[7] | (track_header[6] << 8) | (track_header[5] << 16) | (track_header[4] << 24);
-		printf("trackbuf size %d needed %d\n", trackbufsize, track_length);
 		if (track_length < 0) { TML_WARN("Invalid MTrk header"); break; }
 		// if (trackbufsize < track_length) { TML_FREE(trackbuf); trackbuf = (unsigned char*)TML_MALLOC(trackbufsize = track_length); }
 		if (trackbufsize < track_length) { trackbuf = (unsigned char*)TML_REALLOC(trackbuf, track_length); trackbufsize = track_length; }
@@ -440,7 +436,6 @@ TMLDEF tml_message* tml_load(struct tml_stream* stream)
 		if (p.buf != p.buf_end) { TML_WARN( "Track length did not match data length"); }
 		t->End = p.message_count;
 	}
-	printf("load tracks done\n");
 	TML_FREE(trackbuf);
 
 	// Change message time signature from delta ticks to actual msec values and link messages ordered by time
