@@ -145,6 +145,17 @@ static mp_obj_t fillbuffer(mp_obj_t buffer_obj) {
     }
 }
 
+static mp_obj_t apply_volume(mp_obj_t buffer_obj) {
+    mp_buffer_info_t bufinfo;
+    mp_get_buffer_raise(buffer_obj, &bufinfo, MP_BUFFER_WRITE);
+    int16_t* samples = bufinfo.buf;
+    int sample_count = bufinfo.len / sizeof(int16_t);
+    for (int i = 0; i < sample_count; i++) {
+        samples[i] = (samples[i] * ctx.global_volume) >> 8;
+    }
+    return mp_const_none;
+}
+
 static mp_obj_t unload() {
     hxcmod_unload(&ctx);
     return mp_const_none;
@@ -208,6 +219,7 @@ static MP_DEFINE_CONST_FUN_OBJ_1(load_obj, load);
 static MP_DEFINE_CONST_FUN_OBJ_1(load_sf2_obj, load_sf2);
 static MP_DEFINE_CONST_FUN_OBJ_1(load_midi_obj, load_midi);
 static MP_DEFINE_CONST_FUN_OBJ_1(fillbuffer_obj, fillbuffer);
+static MP_DEFINE_CONST_FUN_OBJ_1(apply_volume_obj, apply_volume);
 static MP_DEFINE_CONST_FUN_OBJ_0(unload_obj, unload);
 static MP_DEFINE_CONST_FUN_OBJ_0(unload_sf2_obj, unload_sf2);
 static MP_DEFINE_CONST_FUN_OBJ_0(unload_midi_obj, unload_midi);
@@ -222,6 +234,7 @@ static const mp_rom_map_elem_t kakenative_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_load_sf2), MP_ROM_PTR(&load_sf2_obj) },
     { MP_ROM_QSTR(MP_QSTR_load_midi), MP_ROM_PTR(&load_midi_obj) },
     { MP_ROM_QSTR(MP_QSTR_fillbuffer), MP_ROM_PTR(&fillbuffer_obj) },
+    { MP_ROM_QSTR(MP_QSTR_apply_volume), MP_ROM_PTR(&apply_volume_obj) },
     { MP_ROM_QSTR(MP_QSTR_unload), MP_ROM_PTR(&unload_obj) },
     { MP_ROM_QSTR(MP_QSTR_unload_sf2), MP_ROM_PTR(&unload_sf2_obj) },
     { MP_ROM_QSTR(MP_QSTR_unload_midi), MP_ROM_PTR(&unload_midi_obj) },
