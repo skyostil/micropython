@@ -9,6 +9,10 @@
 
 #include "hxcmod.h"
 
+#ifndef HXCMOD_MONO_OUTPUT
+#error Only supports mono output
+#endif
+
 void* tracked_malloc(size_t size) {
     void* ptr = m_tracked_calloc(1, size);
     if (!ptr) {
@@ -37,6 +41,8 @@ void* tracked_realloc(void* ptr, size_t size) {
 #define TSF_MALLOC tracked_malloc
 #define TSF_FREE m_tracked_free
 #define TSF_REALLOC tracked_realloc
+#define TSF_FIXED_POINT_RENDER
+#define TSF_RENDER_EFFECTSAMPLEBLOCK 256
 #include "tsf.h"
         
 #define TML_IMPLEMENTATION
