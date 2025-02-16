@@ -1291,6 +1291,8 @@ static void tsf_voice_render(tsf* f, struct tsf_voice* v, float* outputBuffer, i
 		gainMono = noteGain * v->ampenv.level;
 #ifdef TSF_FIXED_POINT_RENDER
 		int32_t gainMonoFixed = (int32_t)(gainMono * 0x10000);
+		int32_t gainLeftFixed;
+		int32_t gainRightFixed;
 #endif
 
 		// Update EG.
@@ -1305,10 +1307,19 @@ static void tsf_voice_render(tsf* f, struct tsf_voice* v, float* outputBuffer, i
 		{
 			case TSF_STEREO_INTERLEAVED:
 				gainLeft = gainMono * v->panFactorLeft, gainRight = gainMono * v->panFactorRight;
+#ifdef TSF_FIXED_POINT_RENDER
+				gainLeftFixed = (int32_t)(gainMonoFixed * v->panFactorLeft);
+				gainRightFixed = (int32_t)(gainMonoFixed * v->panFactorRight);
+#endif
 				while (blockSamples-- && tmpSourceSamplePosition < tmpSampleEndDbl)
 				{
 					unsigned int pos = (unsigned int)tmpSourceSamplePosition, nextPos = (pos >= tmpLoopEnd && isLooping ? tmpLoopStart : pos + 1);
 
+#ifdef TSF_FIXED_POINT_RENDER
+					short val = input[pos];
+					*outL++ += (val * gainLeftFixed);
+					*outL++ += (val * gainRightFixed);
+#else
 					// Simple linear interpolation.
 					float alpha = (float)(tmpSourceSamplePosition - pos), val = (input[pos] * (1.0f - alpha) + input[nextPos] * alpha);
 
@@ -1317,6 +1328,7 @@ static void tsf_voice_render(tsf* f, struct tsf_voice* v, float* outputBuffer, i
 
 					*outL++ += val * gainLeft;
 					*outL++ += val * gainRight;
+#endif
 
 					// Next sample.
 					tmpSourceSamplePosition += pitchRatio;
@@ -1326,10 +1338,19 @@ static void tsf_voice_render(tsf* f, struct tsf_voice* v, float* outputBuffer, i
 
 			case TSF_STEREO_UNWEAVED:
 				gainLeft = gainMono * v->panFactorLeft, gainRight = gainMono * v->panFactorRight;
+#ifdef TSF_FIXED_POINT_RENDER
+				gainLeftFixed = (int32_t)(gainMonoFixed * v->panFactorLeft);
+				gainRightFixed = (int32_t)(gainMonoFixed * v->panFactorRight);
+#endif
 				while (blockSamples-- && tmpSourceSamplePosition < tmpSampleEndDbl)
 				{
 					unsigned int pos = (unsigned int)tmpSourceSamplePosition, nextPos = (pos >= tmpLoopEnd && isLooping ? tmpLoopStart : pos + 1);
 
+#ifdef TSF_FIXED_POINT_RENDER
+					short val = input[pos];
+					*outL++ += (val * gainLeftFixed);
+					*outR++ += (val * gainRightFixed);
+#else
 					// Simple linear interpolation.
 					float alpha = (float)(tmpSourceSamplePosition - pos), val = (input[pos] * (1.0f - alpha) + input[nextPos] * alpha);
 
@@ -1338,6 +1359,7 @@ static void tsf_voice_render(tsf* f, struct tsf_voice* v, float* outputBuffer, i
 
 					*outL++ += val * gainLeft;
 					*outR++ += val * gainRight;
+#endif
 
 					// Next sample.
 					tmpSourceSamplePosition += pitchRatio;
